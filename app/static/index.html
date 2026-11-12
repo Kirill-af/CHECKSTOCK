@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CheckStock — где сейчас товар?</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <header>
+    <h1>CheckStock</h1>
+    <p>
+      Прототип учёта остатков по ФФ: физический остаток, доступно, резерв FBS,
+      товар в пути между складами, на FBO и к клиенту по FBS.
+    </p>
+  </header>
+
+  <main>
+    <section class="card">
+      <div class="toolbar">
+        <h2>Остатки по артикулам и ФФ</h2>
+        <button class="secondary" id="refreshBtn" type="button">Обновить</button>
+      </div>
+      <p class="muted">
+        Доступно = на складе − резерв FBS. Удалённые ФФ остаются в таблице, чтобы было видно, где числится товар.
+      </p>
+      <div class="scroll">
+        <table id="stockTable">
+          <thead></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Товар в пути</h2>
+      <div class="scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Тип</th>
+              <th>Товар</th>
+              <th>Кол-во</th>
+              <th>Откуда</th>
+              <th>Куда</th>
+              <th>Действие</th>
+            </tr>
+          </thead>
+          <tbody id="transitBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="grid-2">
+      <section class="card">
+        <h2>Операции</h2>
+        <div class="tabs" id="opTabs">
+          <button class="tab active" data-panel="receipt" type="button">Приход</button>
+          <button class="tab" data-panel="transfer" type="button">Перемещение</button>
+          <button class="tab" data-panel="fbs" type="button">FBS</button>
+          <button class="tab" data-panel="fbo" type="button">FBO</button>
+        </div>
+
+        <div class="panel active" id="panel-receipt">
+          <form id="receiptForm" class="form-grid">
+            <label>Товар
+              <select name="product_id" data-products required></select>
+            </label>
+            <label>ФФ
+              <select name="warehouse_id" data-warehouses-active required></select>
+            </label>
+            <label>Количество
+              <input name="quantity" type="number" min="1" value="1" required />
+            </label>
+            <label>Idempotency key
+              <input name="idempotency_key" required />
+            </label>
+            <div class="actions" style="grid-column: 1 / -1">
+              <button type="submit">Оформить приход</button>
+              <button class="secondary" type="button" data-regen>Новый key</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="panel" id="panel-transfer">
+          <form id="transferForm" class="form-grid">
+            <label>Товар
+              <select name="product_id" data-products required></select>
+            </label>
+            <label>Количество
+              <input name="quantity" type="number" min="1" value="1" required />
+            </label>
+            <label>Откуда
+              <select name="from_warehouse_id" data-warehouses-active required></select>
+            </label>
+            <label>Куда
+              <select name="to_warehouse_id" data-warehouses-active required></select>
+            </label>
+            <label>Idempotency key
+              <input name="idempotency_key" required />
+            </label>
+            <div class="actions" style="grid-column: 1 / -1">
+              <button type="submit">Отправить между ФФ</button>
+              <button class="secondary" type="button" data-regen>Новый key</button>
+            </div>
+          </form>
+          <p class="muted">Приёмка выполняется из таблицы «Товар в пути».</p>
+        </div>
+
+        <div class="panel" id="panel-fbs">
+          <form id="fbsForm" class="form-grid">
+            <label>Действие
+              <select name="action" required>
+                <option value="reserve">Резерв</option>
+                <option value="cancel">Отмена резерва</option>
+                <option value="ship">Отправка к клиенту</option>
+              </select>
+            </label>
+            <label>Товар
+              <select name="product_id" data-products required></select>
+            </label>
+            <label>ФФ
+              <select name="warehouse_id" data-warehouses-active required></select>
+            </label>
+            <label>Количество
+              <input name="quantity" type="number" min="1" value="1" required />
+            </label>
+            <label>Idempotency key
+              <input name="idempotency_key" required />
+            </label>
+            <div class="actions" style="grid-column: 1 / -1">
+              <button type="submit">Выполнить FBS</button>
+              <button class="secondary" type="button" data-regen>Новый key</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="panel" id="panel-fbo">
+          <form id="fboForm" class="form-grid">
+            <label>Товар
+              <select name="product_id" data-products required></select>
+            </label>
+            <label>ФФ отгрузки
+              <select name="warehouse_id" data-warehouses-active required></select>
+            </label>
+            <label>Количество
+              <input name="quantity" type="number" min="1" value="1" required />
+            </label>
+            <label>Idempotency key
+              <input name="idempotency_key" required />
+            </label>
+            <div class="actions" style="grid-column: 1 / -1">
+              <button type="submit">Отправить FBO</button>
+              <button class="secondary" type="button" data-regen>Новый key</button>
+            </div>
+          </form>
+          <p class="muted">Приёмка на складе маркетплейса — из таблицы «Товар в пути».</p>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Склады ФФ</h2>
+        <form id="warehouseCreateForm" class="form-grid compact">
+          <label>Новый ФФ
+            <input name="name" placeholder="Например, Восток" required />
+          </label>
+          <div class="actions" style="align-self: end">
+            <button type="submit">Добавить</button>
+          </div>
+        </form>
+        <div class="scroll" style="margin-top: 14px">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Название</th>
+                <th>Статус</th>
+                <th>Действия</th>
+              </tr>
+            </thead>
+            <tbody id="warehousesBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <section class="card">
+      <h2>История операций</h2>
+      <p class="muted">Повтор с тем же idempotency_key не списывает товар дважды — возвращается уже созданная операция.</p>
+      <div class="scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Тип</th>
+              <th>Товар</th>
+              <th>Кол-во</th>
+              <th>Откуда</th>
+              <th>Куда</th>
+              <th>Key</th>
+              <th>Когда</th>
+            </tr>
+          </thead>
+          <tbody id="historyBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast"></div>
+  <script src="/static/app.js"></script>
+</body>
+</html>
