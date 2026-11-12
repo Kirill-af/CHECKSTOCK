@@ -62,8 +62,14 @@
           <button class="tab" data-panel="fbo" type="button">FBO</button>
         </div>
 
+        <p class="muted" style="margin-top:0">
+          Ключ идемпотентности генерируется автоматически и недоступен для правки.
+          Кнопка «Повторить последний запрос» шлёт тот же запрос с тем же ключом — остатки не меняются.
+        </p>
+
         <div class="panel active" id="panel-receipt">
           <form id="receiptForm" class="form-grid">
+            <input type="hidden" name="idempotency_key" data-idempotency />
             <label>Товар
               <select name="product_id" data-products required></select>
             </label>
@@ -73,18 +79,16 @@
             <label>Количество
               <input name="quantity" type="number" min="1" value="1" required />
             </label>
-            <label>Idempotency key
-              <input name="idempotency_key" required />
-            </label>
             <div class="actions" style="grid-column: 1 / -1">
               <button type="submit">Оформить приход</button>
-              <button class="secondary" type="button" data-regen>Новый key</button>
+              <button class="secondary" type="button" data-replay disabled>Повторить последний запрос</button>
             </div>
           </form>
         </div>
 
         <div class="panel" id="panel-transfer">
           <form id="transferForm" class="form-grid">
+            <input type="hidden" name="idempotency_key" data-idempotency />
             <label>Товар
               <select name="product_id" data-products required></select>
             </label>
@@ -97,12 +101,9 @@
             <label>Куда
               <select name="to_warehouse_id" data-warehouses-active required></select>
             </label>
-            <label>Idempotency key
-              <input name="idempotency_key" required />
-            </label>
             <div class="actions" style="grid-column: 1 / -1">
               <button type="submit">Отправить между ФФ</button>
-              <button class="secondary" type="button" data-regen>Новый key</button>
+              <button class="secondary" type="button" data-replay disabled>Повторить последний запрос</button>
             </div>
           </form>
           <p class="muted">Приёмка выполняется из таблицы «Товар в пути».</p>
@@ -110,6 +111,7 @@
 
         <div class="panel" id="panel-fbs">
           <form id="fbsForm" class="form-grid">
+            <input type="hidden" name="idempotency_key" data-idempotency />
             <label>Действие
               <select name="action" required>
                 <option value="reserve">Резерв</option>
@@ -126,18 +128,16 @@
             <label>Количество
               <input name="quantity" type="number" min="1" value="1" required />
             </label>
-            <label>Idempotency key
-              <input name="idempotency_key" required />
-            </label>
             <div class="actions" style="grid-column: 1 / -1">
               <button type="submit">Выполнить FBS</button>
-              <button class="secondary" type="button" data-regen>Новый key</button>
+              <button class="secondary" type="button" data-replay disabled>Повторить последний запрос</button>
             </div>
           </form>
         </div>
 
         <div class="panel" id="panel-fbo">
           <form id="fboForm" class="form-grid">
+            <input type="hidden" name="idempotency_key" data-idempotency />
             <label>Товар
               <select name="product_id" data-products required></select>
             </label>
@@ -147,12 +147,9 @@
             <label>Количество
               <input name="quantity" type="number" min="1" value="1" required />
             </label>
-            <label>Idempotency key
-              <input name="idempotency_key" required />
-            </label>
             <div class="actions" style="grid-column: 1 / -1">
               <button type="submit">Отправить FBO</button>
-              <button class="secondary" type="button" data-regen>Новый key</button>
+              <button class="secondary" type="button" data-replay disabled>Повторить последний запрос</button>
             </div>
           </form>
           <p class="muted">Приёмка на складе маркетплейса — из таблицы «Товар в пути».</p>
@@ -187,7 +184,7 @@
 
     <section class="card">
       <h2>История операций</h2>
-      <p class="muted">Повтор с тем же idempotency_key не списывает товар дважды — возвращается уже созданная операция.</p>
+      <p class="muted">Ключ операции создаёт клиент автоматически. Повтор с тем же ключом не списывает товар дважды.</p>
       <div class="scroll">
         <table>
           <thead>

@@ -3,6 +3,7 @@ const state = {
   warehouses: [],
   stock: null,
   history: [],
+  lastRequestByForm: new Map(),
 };
 
 function uuid() {
@@ -48,6 +49,27 @@ async function api(path, options = {}) {
     throw new Error(message);
   }
   return data;
+}
+
+function ensureFormKey(form) {
+  const input = form.querySelector("[data-idempotency]");
+  if (input && !input.value) input.value = uuid();
+  return input?.value;
+}
+
+function rotateFormKey(form) {
+  const input = form.querySelector("[data-idempotency]");
+  if (input) input.value = uuid();
+}
+
+function setReplayEnabled(form, enabled) {
+  const btn = form.querySelector("[data-replay]");
+  if (btn) btn.disabled = !enabled;
+}
+
+function rememberRequest(form, path, payload) {
+  state.lastRequestByForm.set(form.id, { path, payload: { ...payload } });
+  setReplayEnabled(form, true);
 }
 
 function fillSelects() {
@@ -208,18 +230,26 @@ async function refresh() {
   renderHistory();
 }
 
-function regenKeys() {
-  document.querySelectorAll('input[name="idempotency_key"]').forEach((input) => {
-    input.value = uuid();
-  });
-}
-
 function formPayload(form) {
+  ensureFormKey(form);
   const data = Object.fromEntries(new FormData(form).entries());
   ["product_id", "warehouse_id", "from_warehouse_id", "to_warehouse_id", "quantity"].forEach((k) => {
     if (data[k] !== undefined) data[k] = Number(data[k]);
   });
   return data;
+}
+
+async function submitOperation(form, path, payload, successText) {
+  const op = await api(path, { method: "POST", body: JSON.stringify(payload) });
+  rememberRequest(form, path, payload);
+  if (op.reused) {
+    toast(`Повтор: операция #${op.id} уже была применена, остатки не изменились`);
+  } else {
+    toast(`${successText} #${op.id}`);
+    rotateFormKey(form);
+  }
+  await refresh();
+  return op;
 }
 
 document.getElementById("opTabs").addEventListener("click", (e) => {
@@ -230,11 +260,28 @@ document.getElementById("opTabs").addEventListener("click", (e) => {
   document.getElementById(`panel-${btn.dataset.panel}`).classList.add("active");
 });
 
-document.querySelectorAll("[data-regen]").forEach((btn) => {
-  btn.addEventListener("click", () => {
+document.querySelectorAll("[data-replay]").forEach((btn) => {
+  btn.addEventListener("click", async () => {
     const form = btn.closest("form");
-    const input = form.querySelector('input[name="idempotency_key"]');
-    input.value = uuid();
+    const last = state.lastRequestByForm.get(form.id);
+    if (!last) {
+      toast("Сначала выполните операцию", true);
+      return;
+    }
+    try {
+      const op = await api(last.path, {
+        method: "POST",
+        body: JSON.stringify(last.payload),
+      });
+      toast(
+        op.reused
+          ? `Идемпотентность: повтор с тем же ключом, операция #${op.id}, остатки не изменились`
+          : `Операция выполнена #${op.id}`
+      );
+      await refresh();
+    } catch (err) {
+      toast(err.message, true);
+    }
   });
 });
 
@@ -246,9 +293,7 @@ document.getElementById("receiptForm").addEventListener("submit", async (e) => {
   e.preventDefault();
   try {
     const payload = formPayload(e.target);
-    const op = await api("/api/operations/receipt", { method: "POST", body: JSON.stringify(payload) });
-    toast(op.reused ? `Повтор: операция #${op.id} уже была применена` : `Приход оформлен #${op.id}`);
-    await refresh();
+    await submitOperation(e.target, "/api/operations/receipt", payload, "Приход оформлен");
   } catch (err) {
     toast(err.message, true);
   }
@@ -258,12 +303,12 @@ document.getElementById("transferForm").addEventListener("submit", async (e) => 
   e.preventDefault();
   try {
     const payload = formPayload(e.target);
-    const op = await api("/api/operations/transfer/ship", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    });
-    toast(op.reused ? `Повтор: операция #${op.id}` : `Перемещение отправлено #${op.id}`);
-    await refresh();
+    await submitOperation(
+      e.target,
+      "/api/operations/transfer/ship",
+      payload,
+      "Перемещение отправлено"
+    );
   } catch (err) {
     toast(err.message, true);
   }
@@ -281,9 +326,7 @@ document.getElementById("fbsForm").addEventListener("submit", async (e) => {
         : action === "cancel"
           ? "/api/operations/fbs/cancel"
           : "/api/operations/fbs/ship";
-    const op = await api(path, { method: "POST", body: JSON.stringify(payload) });
-    toast(op.reused ? `Повтор: операция #${op.id}` : `FBS ${action}: #${op.id}`);
-    await refresh();
+    await submitOperation(e.target, path, payload, `FBS ${action}`);
   } catch (err) {
     toast(err.message, true);
   }
@@ -293,9 +336,7 @@ document.getElementById("fboForm").addEventListener("submit", async (e) => {
   e.preventDefault();
   try {
     const payload = formPayload(e.target);
-    const op = await api("/api/operations/fbo/ship", { method: "POST", body: JSON.stringify(payload) });
-    toast(op.reused ? `Повтор: операция #${op.id}` : `FBO отправлено #${op.id}`);
-    await refresh();
+    await submitOperation(e.target, "/api/operations/fbo/ship", payload, "FBO отправлено");
   } catch (err) {
     toast(err.message, true);
   }
@@ -367,5 +408,8 @@ document.getElementById("transitBody").addEventListener("click", async (e) => {
   }
 });
 
-regenKeys();
+document.querySelectorAll("form").forEach((form) => {
+  if (form.querySelector("[data-idempotency]")) rotateFormKey(form);
+});
+
 refresh().catch((err) => toast(err.message, true));
